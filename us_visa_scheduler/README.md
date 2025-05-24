@@ -2,7 +2,7 @@
 
 The `visa_rescheduler` is a bot for monitoring US VISA (usvisa-info.com) appointment available dates. It can automatically reschedule to the earliest date it finds on your behalf, and optionally notify you when that happens.
 
-This enhanced version adds real-time **Telegram alerts**, improved error handling with screenshots, and support for SendGrid and Pushover.
+This enhanced version adds real-time **Telegram alerts**, improved error handling with screenshots, and support for SendGrid and Pushover. It also includes built-in retry logic and cooldowns to handle site timeouts or bans without crashing.
 
 ---
 
@@ -15,6 +15,7 @@ This enhanced version adds real-time **Telegram alerts**, improved error handlin
   - Reschedule success
   - Reschedule failure
   - Exceptions or errors with screenshots
+- Handles site timeouts and retries instead of failing
 - Optional alerts via SendGrid, Pushover, or your personal push endpoint
 - Logs activity to `log.txt`
 
@@ -117,6 +118,14 @@ If a reschedule attempt fails or crashes, the script saves a screenshot and send
 
 ---
 
+## ⏱ Cooldowns & Error Handling
+- If no better date is found, it waits between `RETRY_TIME_L_BOUND` and `RETRY_TIME_U_BOUND`
+- If session exceeds `WORK_LIMIT_TIME`, it logs out and rests for `WORK_COOLDOWN_TIME`
+- If no dates are returned (banned or blocked), it cools down for `BAN_COOLDOWN_TIME`
+- If a timeout or error occurs while loading, it retries automatically instead of crashing
+
+---
+
 ## 🏛 How to Add New Embassy
 If your embassy isn’t listed in `embassy.py`, you can add it manually by finding the **Facility ID** from the appointment page using browser dev tools. See the image below:
 ![Finding Facility id](./doc/add_embassy.png)
@@ -127,6 +136,7 @@ If your embassy isn’t listed in `embassy.py`, you can add it manually by findi
 - ❌ **403 from GitHub**: Use a [PAT](https://github.com/settings/tokens) or switch to SSH
 - ❌ **Blank screenshots**: The page may not have loaded yet; try increasing `STEP_TIME`
 - ❌ **No available dates found**: Widen your `PRIOD_START` / `PRIOD_END` range
+- ❌ **Bot crashes on page timeout**: Update to the latest script with retry logic
 
 ---
 
