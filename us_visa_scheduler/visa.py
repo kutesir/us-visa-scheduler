@@ -31,13 +31,8 @@ FACILITY_ID = Embassies[YOUR_EMBASSY][1]
 REGEX_CONTINUE = Embassies[YOUR_EMBASSY][2]
 
 # Notification
-# NOTE: Token and chat_id are loaded from config.ini
-# TELEGRAM_BOT_TOKEN = 8045674312:AAFQJan22h10AYZIFikgO4rjXR6zEfyt4fE
-# TELEGRAM_CHAT_ID = <YOUR_CHAT_ID>  # Replace in config.ini
 TELEGRAM_BOT_TOKEN = config['NOTIFICATION'].get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = config['NOTIFICATION'].get('TELEGRAM_CHAT_ID')
-
-# Notification
 SENDGRID_API_KEY = config['NOTIFICATION']['SENDGRID_API_KEY']
 PUSHOVER_TOKEN = config['NOTIFICATION']['PUSHOVER_TOKEN']
 PUSHOVER_USER = config['NOTIFICATION']['PUSHOVER_USER']
@@ -75,25 +70,26 @@ JS_SCRIPT = ("var req = new XMLHttpRequest();"
              "req.send(null);"
              "return req.responseText;")
 
+def send_telegram(message):
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+        try:
+            requests.post(url, data=payload)
+        except Exception as e:
+            logging.warning(f"Failed to send Telegram message: {e}")
+
 def auto_action(label, find_by, el_type, action, value, sleep_time=0):
     match find_by.lower():
-        case 'id':
-            item = driver.find_element(By.ID, el_type)
-        case 'name':
-            item = driver.find_element(By.NAME, el_type)
-        case 'class':
-            item = driver.find_element(By.CLASS_NAME, el_type)
-        case 'xpath':
-            item = driver.find_element(By.XPATH, el_type)
-        case _:
-            return 0
+        case 'id': item = driver.find_element(By.ID, el_type)
+        case 'name': item = driver.find_element(By.NAME, el_type)
+        case 'class': item = driver.find_element(By.CLASS_NAME, el_type)
+        case 'xpath': item = driver.find_element(By.XPATH, el_type)
+        case _: return 0
     match action.lower():
-        case 'send':
-            item.send_keys(value)
-        case 'click':
-            item.click()
-        case _:
-            return 0
+        case 'send': item.send_keys(value)
+        case 'click': item.click()
+        case _: return 0
     logging.info(f"\t{label}:\t\tCheck!")
     if sleep_time:
         time.sleep(sleep_time)
@@ -132,13 +128,11 @@ def browser_get_time(date):
 def browser_reschedule(date):
     time = browser_get_time(date)
     driver.get(APPOINTMENT_URL)
-
     headers = {
         "User-Agent": driver.execute_script("return navigator.userAgent;"),
         "Referer": APPOINTMENT_URL,
         "Cookie": "_yatri_session=" + driver.get_cookie("_yatri_session")["value"]
     }
-
     data = {
         "authenticity_token": driver.find_element(by=By.NAME, value='authenticity_token').get_attribute('value'),
         "confirmed_limit_message": driver.find_element(by=By.NAME, value='confirmed_limit_message').get_attribute('value'),
@@ -147,69 +141,99 @@ def browser_reschedule(date):
         "appointments[consulate_appointment][date]": date,
         "appointments[consulate_appointment][time]": time,
     }
-
     r = requests.post(APPOINTMENT_URL, headers=headers, data=data)
     if 'Successfully Scheduled' in r.text:
-        return "SUCCESS", f"Rescheduled Successfully! {date} {time}"
+        msg = f"✅ Rescheduled Successfully! {date} {time}"
+        send_telegram(msg)
+        return "SUCCESS", msg
     else:
-        return "FAIL", f"Reschedule Failed!!! {date} {time}"
+        msg = f"❌ Reschedule Failed!!! {date} {time}"
+        send_telegram(msg)
+        return "FAIL", msg
 
 def get_better_date(dates):
     def is_in_period(date, PSD, PED):
         new_date = datetime.strptime(date, "%Y-%m-%d")
         return PSD < new_date < PED
-
     PED = datetime.strptime(PRIOD_END, "%Y-%m-%d")
     PSD = datetime.strptime(PRIOD_START, "%Y-%m-%d")
-
     for d in dates:
         if is_in_period(d.get('date'), PSD, PED):
             return d.get('date')
     return None
 
+# ==== Safe Wrappers and Main Logic Follow Here ====
+
+def safe_browser_login():
+    attempts = 0
+    while attempts < 3:
+        try:
+            browser_login()
+            return True
+        except Exception as e:
+            attempts += 1
+            msg = f"🔁 Login attempt {attempts}/3 failed: {e}"
+            logging.warning(msg)
+            send_telegram(msg)
+            time.sleep(30)
+    msg = "❌ Failed to login after 3 attempts. Cooling down."
+    logging.error(msg)
+    send_telegram(msg)
+    time.sleep(300)
+    return False
+
+def safe_browser_reschedule(date):
+    attempts = 0
+    while attempts < 3:
+        try:
+            return browser_reschedule(date)
+        except Exception as e:
+            attempts += 1
+            msg = f"🔁 Reschedule attempt {attempts}/3 failed: {e}"
+            logging.warning(msg)
+            send_telegram(msg)
+            time.sleep(30)
+    msg = f"❌ Failed to reschedule for {date} after 3 attempts. Skipping."
+    logging.error(msg)
+    send_telegram(msg)
+    return "FAIL", msg
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler("log.txt"),
-        ]
+        handlers=[logging.FileHandler("log.txt")]
     )
-
     chrome_options = Options()
     chrome_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-
-    if LOCAL_USE:
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
-    else:
-        driver = webdriver.Remote(
-            command_executor=HUB_ADDRESS,
-            options=chrome_options
-        )
-
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     logging.info("========= Program Started =========")
-
     final_notification_title = "None"
     should_login = True
     count_request = 0
+    
     time_session_started = 0
 
-    while True:
-        count_request += 1
-        print("-" * 60 + f"\nRequest {count_request}\n")
-        logging.info(f"Request {count_request}")
+    retry_attempts = 0
+    max_retries = 5
 
+    while retry_attempts < max_retries:
+        count_request += 1
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print("\n" + "-" * 60 + f"\nRequest {count_request} at {timestamp}\n")
+
+        send_telegram(f"📡 Request {count_request} started at {timestamp}")
         try:
             if should_login:
                 time_session_started = time.time()
-                browser_login()
+                if not safe_browser_login():
+                    continue
                 should_login = False
 
             dates = browser_get_date()
+            retry_attempts = 0
             logging.info(f"Found earliest available days: {dates[:10]}")
+            # send_telegram(f"📅 Dates found: {dates[:3]}")  # disabled
             date = get_better_date(dates)
             logging.info(f"get_better_date(dates) = {date}")
 
@@ -217,7 +241,6 @@ if __name__ == "__main__":
                 msg = f"List is empty, probably banned. Sleeping {BAN_COOLDOWN_TIME} hours."
                 print(msg)
                 logging.info(msg)
-
                 driver.get(SIGN_OUT_LINK)
                 should_login = True
                 time.sleep(BAN_COOLDOWN_TIME * SECONDS_IN_HOUR)
@@ -227,7 +250,7 @@ if __name__ == "__main__":
                 msg = "Found a better date. Attempting to reschedule..."
                 print(msg)
                 logging.info(msg)
-                final_notification_title, msg = browser_reschedule(date)
+                final_notification_title, msg = safe_browser_reschedule(date)
                 break
 
             msg = "No better date. Retrying..."
@@ -235,13 +258,14 @@ if __name__ == "__main__":
             logging.info(msg)
 
             session_up_time = time.time() - time_session_started
-            logging.info(f"Session uptime: {session_up_time / SECONDS_IN_MINUTE:.2f} minutes")
+            msg = f"Session uptime: {session_up_time / SECONDS_IN_MINUTE:.2f} minutes"
+            print(msg)
+            logging.info(msg)
 
             if session_up_time > WORK_LIMIT_TIME * SECONDS_IN_HOUR:
                 msg = f"Taking a break after {WORK_LIMIT_TIME} hours"
                 print(msg)
                 logging.info(msg)
-
                 driver.get(SIGN_OUT_LINK)
                 should_login = True
                 time.sleep(WORK_COOLDOWN_TIME * SECONDS_IN_HOUR)
@@ -252,15 +276,27 @@ if __name__ == "__main__":
                 logging.info(msg)
                 time.sleep(sleep_duration)
 
+        except TimeoutException:
+            retry_attempts += 1
+            msg = f"⚠️ Timeout while fetching available dates. Retry {retry_attempts}/{max_retries}"
+            logging.warning(msg)
+            send_telegram(msg)
+            time.sleep(60)
         except Exception as e:
-            final_notification_title = "ERROR"
-            msg = "Exception occurred! Program will exit.\n" + str(e)
-            logging.error(e)
-            break
+            retry_attempts += 1
+            msg = f"❌ Unexpected error fetching dates (attempt {retry_attempts}/{max_retries}): {e}"
+            logging.error(msg)
+            send_telegram(msg)
+            time.sleep(120)
+
+    else:
+        msg = "❌ Max retries exceeded while fetching dates. Cooling down before retrying."
+        logging.error(msg)
+        send_telegram(msg)
+        time.sleep(300)
 
     print(final_notification_title, msg)
     logging.info((final_notification_title, msg))
-
     logging.info("Closing browser...")
     driver.get(SIGN_OUT_LINK)
     driver.quit()
