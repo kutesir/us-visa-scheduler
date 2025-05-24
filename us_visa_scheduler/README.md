@@ -1,73 +1,147 @@
 # visa_rescheduler
+
 The `visa_rescheduler` is a bot for monitoring US VISA (usvisa-info.com) appointment available dates. It can automatically reschedule to the earliest date it finds on your behalf, and optionally notify you when that happens.
 
-## Prerequisites
-- Having a US VISA appointment scheduled already.
-- [Optional] API token from Pushover and/or a Sendgrid (for notifications)(You also can use the `esender.php` file in this repo as an email pusher on your website)
+This enhanced version adds real-time **Telegram alerts**, improved error handling with screenshots, and support for SendGrid and Pushover.
 
-## How to use
-Following steps are tested on Windows.
+---
 
-This project contains a Python script `visa.py` that runs on your local machine, so you will need Python and a browser (currently only supports Google Chrome) installed on your local machine.
+## 🚀 Features
+- Logs into the visa appointment system
+- Searches for earlier available dates
+- Automatically reschedules if a better date is found
+- Sends Telegram alerts for:
+  - Script start
+  - Reschedule success
+  - Reschedule failure
+  - Exceptions or errors with screenshots
+- Optional alerts via SendGrid, Pushover, or your personal push endpoint
+- Logs activity to `log.txt`
 
-### 1. Install dependency
-1. Install Google Chrome [for install goto: https://www.google.com/chrome/]
-2. Install Python v3 [for install goto: https://www.python.org/downloads/]
-3. Install the required python packages: Just run the bat file in the Microsoft Windows. Or run the below commands:
-    ```
-    pip install requests==2.27.1
-    pip install selenium==4.2.0
-    pip install webdriver-manager==3.7.0
-    pip install sendgrid==6.9.7
-    ```
+---
 
-### 2. Provide your appointment information
-In order to find the next available date, this program needs to know your appointment information. To do this, open and edit `config.ini` file:
+## ✅ Prerequisites
+- You must already have a US VISA appointment scheduled
+- Python 3.10+ and Google Chrome installed
+- Optional: a Telegram bot and chat ID, Pushover API key, or SendGrid token
 
-1. You should fill everything in the `[PERSONAL_INFO]` section with your account and appointment information.
-2. You should configure at least 1 method of notification under the `[NOTIFICATION]` section. You can use both of them at the same time. (See Configure notification section for more details)
+---
 
-### 3. Run the script
+## 🧰 Installation
+```bash
+# Clone the repo
+https://github.com/kutesir/us-visa-scheduler.git
+cd us-visa-scheduler
 
-Open a terminal(windows powershell) and run the below command:
+# Set up virtual environment
+python3 -m venv env
+source env/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
-python.exe .\visa.py
+Or manually:
+```bash
+pip install requests==2.27.1
+pip install selenium==4.2.0
+pip install webdriver-manager==3.7.0
+pip install sendgrid==6.9.7
 ```
 
-If all dependencies are installed correctly, the script will start running. You can see the logs in the terminal, and the Chrome browser will be opened. From here, just leave the program running. When a available date is found, the program will notify you using the services you have configured in the config.ini file.
+---
 
-To stop the program, just close the terminal or press Ctrl+C.
+## ⚙️ Configuration
+Edit the `config.ini` file to match your information:
+```ini
+[PERSONAL_INFO]
+USERNAME = your_email
+PASSWORD = your_password
+SCHEDULE_ID = your_schedule_id
+PRIOD_START = 2025-05-27
+PRIOD_END = 2025-08-15
+YOUR_EMBASSY = en-ug-yer
 
-## Configure notification
+[NOTIFICATION]
+TELEGRAM_BOT_TOKEN = your_telegram_bot_token
+TELEGRAM_CHAT_ID = your_telegram_chat_id
+PUSHOVER_TOKEN = your_pushover_token
+PUSHOVER_USER = your_pushover_user
+SENDGRID_API_KEY = your_sendgrid_key
+PUSH_TARGET_EMAIL = notify@example.com
+PERSONAL_PUSHER_URL = https://yourapi.com/esender.php
 
-You can configure to receive notification when the program finds a date and attempts rescheduling. To do this, you should configure at least one of the notification methods in the `config.ini` file. You can use both of them at the same time.
+[CHROMEDRIVER]
+LOCAL_USE = True
+HUB_ADDRESS = http://localhost:9515/wd/hub
 
-### Phone notification using Pushover
+[TIME]
+RETRY_TIME_L_BOUND = 10
+RETRY_TIME_U_BOUND = 120
+WORK_LIMIT_TIME = 1.5
+WORK_COOLDOWN_TIME = 2.25
+BAN_COOLDOWN_TIME = 5
+```
 
-In summary, you will need 1) a Pushover account and 2) Create an Application under your Pushover account.
+---
 
-1. Go to https://pushover.net/ and create an account.
-2. Go to https://pushover.net/, log into your account. Scroll down and click on "Create an Application/API Token"
-3. Replace the `PUSHOVER_TOKEN` and `PUSHOVER_USER` in the `config.ini` file with your own keys.
+## ▶️ How to Run
+```bash
+python visa.py
+```
+If all dependencies are installed correctly, the script will start running. You’ll see Chrome launch and log activity in the terminal. When a new date is found, the script will reschedule and notify you.
 
-### Email notification using SendGrid
+---
 
-TODO
+## 🔔 Configure Notification
+### ✅ Telegram
+1. Create a bot via [@BotFather](https://t.me/BotFather)
+2. Paste your token and chat ID in `config.ini`
+3. The script will send you text alerts and screenshots automatically
 
-## How to add new embassy
-There are too many embassies on the world, this program cannot support all of them. You can easily add the missing embassies yourself.
+### ✅ Pushover
+1. Create a Pushover account
+2. Add an app, get the API Token/User Key
+3. Fill them in your `config.ini`
 
-- First check if the embassy your are looking for is already supported, by checking `embassy.py` file. If it is not there, you should add it yourself.
-- To add a new embassy (using English), you should find the embassy's "facility id." To do this, using google chrome, on the booking page of your account, right-click on the location section, then click "inspect." Then the right-hand window will be opened, highlighting the "select" item. You can find the "facility id" here and add this facility id in the 'embassy.py' file. There might be several facility ids for several different embassies. They can be added too. Please use the picture below as an illustration of the process.
+### ✅ Email via SendGrid
+1. Create an account at [sendgrid.com](https://sendgrid.com)
+2. Generate an API key
+3. Fill in the `SENDGRID_API_KEY` and `PUSH_TARGET_EMAIL`
+
+---
+
+## 🖼 Screenshot Alerts
+If a reschedule attempt fails or crashes, the script saves a screenshot and sends it to you (via Telegram if enabled):
+- `reschedule_error.png`
+- `fatal_exception.png`
+
+---
+
+## 🏛 How to Add New Embassy
+If your embassy isn’t listed in `embassy.py`, you can add it manually by finding the **Facility ID** from the appointment page using browser dev tools. See the image below:
 ![Finding Facility id](./doc/add_embassy.png)
 
+---
 
-## TODO
-- Make timing optimum. (There are lots of unanswered questions. How is the banning algorithm? How can we avoid it? etc.)
-- Adding a GUI (Based on PyQt)
-- Multi-account support (switching between accounts in Resting times)
-- Add a sound alert for different events.
-- Extend the embassies list.
+## 🛠 Troubleshooting
+- ❌ **403 from GitHub**: Use a [PAT](https://github.com/settings/tokens) or switch to SSH
+- ❌ **Blank screenshots**: The page may not have loaded yet; try increasing `STEP_TIME`
+- ❌ **No available dates found**: Widen your `PRIOD_START` / `PRIOD_END` range
 
-## Acknowledgement
-Thanks to everyone who participated in this repo. Lots of people are using your excellent product without even appreciating you.
+---
+
+## 📅 Future Improvements
+- Multi-account rotation
+- GUI (PyQt)
+- Sound alerts
+- Better ban detection
+
+---
+
+## 🙏 Acknowledgements
+Thanks to all contributors and users who provided feedback. Inspired by several visa-slot monitoring tools and enhanced with multi-channel alerting and usability improvements.
+
+---
+
+## 📄 License
+MIT — Free to use, modify, and share. Contributions welcome.
